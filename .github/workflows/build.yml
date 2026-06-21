@@ -1,0 +1,130 @@
+name: build
+
+# Builds portable i2pd binaries for every platform Qortium Home manages a Core
+# on, then (on a release tag) packages them with SHA256SUMS + manifest.json.
+#
+# Status: the Linux path is proven locally (fully-static, SAM-verified). The
+# Windows and macOS jobs are first-cut and get validated on their first CI run.
+#
+# Trigger a release by pushing a tag like `2.60.0-q1`.
+
+on:
+  push:
+    tags: ['*-q*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write   # release job creates the GitHub release
+
+env:
+  I2PD_VERSION: '2.60.0'
+
+jobs:
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-latest,    arch: x86_64 }
+          - { runner: ubuntu-24.04-arm, arch: aarch64 }   # native arm64 runner
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (Alpine/musl static, in Docker)
+        run: ./build/build-linux.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: out-linux-${{ matrix.arch }}
+          path: out/linux-${{ matrix.arch }}/
+
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+      - name: Build (MinGW static)
+        run: ./build/build-windows.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: out-windows-x64
+          path: out/windows-x64/
+
+  macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-13, arch: x86_64 }   # Intel
+          - { runner: macos-14, arch: arm64 }    # Apple Silicon
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build (static deps, ad-hoc signed)
+        # When an Apple Developer ID exists, expose it as a secret and pass it
+        # through as MACOS_SIGN_IDENTITY to switch from ad-hoc to Developer-ID.
+        env:
+          MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+        run: ./build/build-macos.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: out-macos-${{ matrix.arch }}
+          path: out/macos-${{ matrix.arch }}/
+
+  release:
+    needs: [linux, windows, macos]
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Package assets + manifest
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME}"
+          mkdir -p release
+          # Map artifact dirs (out-<os>-<arch>) -> packaged release assets.
+          declare -A TARGETS
+          for d in artifacts/out-*; do
+            target="${d#artifacts/out-}"          # e.g. linux-x86_64
+            if [ -f "$d/i2pd.exe" ]; then
+              asset="i2pd-${VERSION}-${target}.zip"
+              ( cd "$d" && zip -q "../../release/${asset}" i2pd.exe )
+            else
+              asset="i2pd-${VERSION}-${target}.tar.gz"
+              tar -czf "release/${asset}" -C "$d" i2pd
+            fi
+            TARGETS["$target"]="$asset"
+          done
+          cd release
+          sha256sum * > SHA256SUMS
+          # Build manifest.json (target -> { asset, sha256 }) for Home.
+          {
+            printf '{\n  "version": "%s",\n  "builtFrom": "i2pd %s",\n  "targets": {\n' \
+              "$VERSION" "$I2PD_VERSION"
+            first=1
+            for target in "${!TARGETS[@]}"; do
+              asset="${TARGETS[$target]}"
+              sha="$(sha256sum "$asset" | cut -d' ' -f1)"
+              [ $first -eq 1 ] || printf ',\n'
+              first=0
+              printf '    "%s": { "asset": "%s", "sha256": "%s" }' "$target" "$asset" "$sha"
+            done
+            printf '\n  }\n}\n'
+          } > manifest.json
+          cat manifest.json
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/*.tar.gz
+            release/*.zip
+            release/SHA256SUMS
+            release/manifest.json
