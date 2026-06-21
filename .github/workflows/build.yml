@@ -57,12 +57,14 @@ jobs:
           path: out/windows-x64/
 
   macos:
+    # Both arches build on Apple-Silicon (macos-14) runners; x86_64 is
+    # cross-compiled there to avoid GitHub's scarce/slow Intel (macos-13) queue.
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { runner: macos-13, arch: x86_64 }   # Intel
-          - { runner: macos-14, arch: arm64 }    # Apple Silicon
+          - { runner: macos-14, arch: arm64 }    # native
+          - { runner: macos-14, arch: x86_64 }   # cross-compiled
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
@@ -71,6 +73,7 @@ jobs:
         # through as MACOS_SIGN_IDENTITY to switch from ad-hoc to Developer-ID.
         env:
           MACOS_SIGN_IDENTITY: ${{ secrets.MACOS_SIGN_IDENTITY }}
+          TARGET_ARCH: ${{ matrix.arch }}
         run: ./build/build-macos.sh
       - uses: actions/upload-artifact@v4
         with:
