@@ -101,6 +101,9 @@ jobs:
               asset="i2pd-${VERSION}-${target}.zip"
               ( cd "$d" && zip -q "../../release/${asset}" i2pd.exe )
             else
+              # actions/upload-artifact strips Unix permissions, so restore the
+              # exec bit before tarring or the published binary extracts as 0644.
+              chmod +x "$d/i2pd"
               asset="i2pd-${VERSION}-${target}.tar.gz"
               tar -czf "release/${asset}" -C "$d" i2pd
             fi
