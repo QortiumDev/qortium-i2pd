@@ -57,9 +57,16 @@ else
 fi
 
 cd build
+# Point FindZLIB straight at Homebrew's static libz.a + headers. We set the
+# explicit ZLIB_LIBRARY/ZLIB_INCLUDE_DIR cache vars (not ZLIB_ROOT) because
+# i2pd's CMakeLists declares an ancient cmake_minimum_required, which leaves
+# policy CMP0074 OLD so <Pkg>_ROOT hints are ignored. Without this, CMake finds
+# the macOS SDK's zlib.h (1.2.12) but no static lib and ZLIB::ZLIB is not made.
+ZLIB_PREFIX="$(brew --prefix zlib)"
 cmake -DWITH_STATIC=ON -DWITH_UPNP=OFF \
   -DOPENSSL_ROOT_DIR="$(brew --prefix openssl@3)" \
-  -DZLIB_ROOT="$(brew --prefix zlib)" .
+  -DZLIB_LIBRARY="${ZLIB_PREFIX}/lib/libz.a" \
+  -DZLIB_INCLUDE_DIR="${ZLIB_PREFIX}/include" .
 make -j"$(sysctl -n hw.ncpu)"
 strip i2pd
 
