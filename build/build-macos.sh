@@ -56,6 +56,14 @@ else
   git tag -v "${I2PD_VERSION}"
 fi
 
+# macOS cannot fully-statically link (no crt0.o / static libc). i2pd's
+# WITH_STATIC unconditionally sets the exe LINK_FLAGS to "-static" for all
+# non-MSVC targets (build/CMakeLists.txt), which fails on Apple with
+# `ld: library not found for -lcrt0.o`. Neutralize just that flag in our source
+# copy: WITH_STATIC still links Boost/OpenSSL/zlib statically; libSystem links
+# dynamically, which is the standard portable-macOS approach. (BSD sed.)
+sed -i '' 's/LINK_FLAGS "-static"/LINK_FLAGS ""/' build/CMakeLists.txt
+
 cd build
 # Point FindZLIB straight at Homebrew's static libz.a + headers. We set the
 # explicit ZLIB_LIBRARY/ZLIB_INCLUDE_DIR cache vars (not ZLIB_ROOT) because
