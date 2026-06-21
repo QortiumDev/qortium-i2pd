@@ -35,7 +35,10 @@ mkdir -p "$OUTDIR"
 
 echo ">> Building i2pd ${I2PD_VERSION} for macos-${ARCH}"
 
-brew install boost openssl@3 cmake gnupg
+# zlib is keg-only on Homebrew but ships a static libz.a; macOS's SDK provides
+# only libz.dylib, so without this the WITH_STATIC find_package(ZLIB) finds no
+# static lib and the ZLIB::ZLIB target is never created (CMake generate fails).
+brew install boost openssl@3 zlib cmake gnupg
 
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
@@ -55,7 +58,8 @@ fi
 
 cd build
 cmake -DWITH_STATIC=ON -DWITH_UPNP=OFF \
-  -DOPENSSL_ROOT_DIR="$(brew --prefix openssl@3)" .
+  -DOPENSSL_ROOT_DIR="$(brew --prefix openssl@3)" \
+  -DZLIB_ROOT="$(brew --prefix zlib)" .
 make -j"$(sysctl -n hw.ncpu)"
 strip i2pd
 

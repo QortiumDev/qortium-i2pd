@@ -128,5 +128,3 @@ jobs:
             release/*.zip
             release/SHA256SUMS
             release/manifest.json
-
-# (registered via workflow-file push)
