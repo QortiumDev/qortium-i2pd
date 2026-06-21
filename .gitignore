@@ -1,0 +1,5 @@
+# Build output (binaries, checksums, manifests) — published as release assets, not committed.
+/out/
+# Local source checkouts / scratch.
+/i2pd/
+*.tmp
