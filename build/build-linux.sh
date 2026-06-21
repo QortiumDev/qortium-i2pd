@@ -31,7 +31,7 @@ echo ">> Output: ${OUTDIR}"
 
 # The whole build runs in the container. Single-quoted heredoc: expansions happen
 # inside the container, not on the host. Pinned values are passed via -e.
-docker run --rm \
+docker run -i --rm \
   -e I2PD_VERSION="$I2PD_VERSION" \
   -e I2PD_REPO="$I2PD_REPO" \
   -e R4SAS_KEY_ID="$R4SAS_KEY_ID" \
@@ -40,7 +40,7 @@ docker run --rm \
   -v "$OUTDIR":/out \
   "$ALPINE_IMAGE" sh -eux <<'BUILD'
   apk add --no-cache \
-    build-base make git gnupg ca-certificates wget \
+    build-base make cmake git gnupg ca-certificates wget \
     boost-dev boost-static \
     openssl-dev openssl-libs-static \
     zlib-dev zlib-static
@@ -61,8 +61,13 @@ docker run --rm \
     git tag -v "${I2PD_VERSION}"
   fi
 
-  # Fully static build; drop UPnP (not needed for the SAM fallback path).
-  make USE_STATIC=yes USE_UPNP=no -j"$(nproc)"
+  # Fully static build via CMake. The Makefile's USE_STATIC path hardcodes
+  # Debian-multiarch lib locations that don't exist on Alpine/musl; CMake
+  # (WITH_STATIC) discovers the static Boost/OpenSSL/zlib properly. Drop UPnP —
+  # not needed for the SAM fallback path.
+  cd build
+  cmake -DWITH_STATIC=ON -DWITH_UPNP=OFF .
+  make -j"$(nproc)"
   strip i2pd
 
   cp i2pd /out/i2pd
