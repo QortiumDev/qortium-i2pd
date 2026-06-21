@@ -96,7 +96,13 @@ cd build
 # <Pkg>_ROOT hints are ignored — i2pd's ancient cmake_minimum_required leaves
 # CMP0074 OLD), OPENSSL_ROOT_DIR, and CMAKE_PREFIX_PATH so the (CONFIG-mode)
 # find_package(Boost) resolves the right prefix.
+# Target macOS 11 (Big Sur) to match Qortium Home's supported range (Home ships
+# an Electron 38 macOS 11 dmg). Built on macos-14 runners, the default min would
+# be macOS 14, so a downloaded i2pd would refuse to launch on 11–13. 11.0 is also
+# the floor for Apple Silicon. Verify the result with Home's
+# scripts/verify-macos-min-version.mjs and on a real older Mac.
 cmake $ARCH_FLAG -DWITH_STATIC=ON -DWITH_UPNP=OFF \
+  -DCMAKE_OSX_DEPLOYMENT_TARGET="${MACOS_DEPLOYMENT_TARGET:-11.0}" \
   -DCMAKE_PREFIX_PATH="${BOOST_PREFIX}" \
   -DOPENSSL_ROOT_DIR="${OPENSSL_PREFIX}" \
   -DZLIB_LIBRARY="${ZLIB_PREFIX}/lib/libz.a" \
