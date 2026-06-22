@@ -53,8 +53,8 @@ jobs:
         run: ./build/build-windows.sh
       - uses: actions/upload-artifact@v4
         with:
-          name: out-windows-x64
-          path: out/windows-x64/
+          name: out-windows-x86_64
+          path: out/windows-x86_64/
 
   macos:
     # Both arches build on Apple-Silicon (macos-14) runners; x86_64 is

@@ -19,7 +19,7 @@ R4SAS_KEY_ID="66F6C87B98EBCFE2"
 R4SAS_KEY_URL="https://repo.i2pd.xyz/r4sas.gpg"
 SKIP_GPG="${SKIP_GPG:-0}"
 
-ARCH="x64"
+ARCH="x86_64"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OUTDIR="${REPO_ROOT}/out/windows-${ARCH}"
 mkdir -p "$OUTDIR"

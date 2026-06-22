@@ -18,7 +18,7 @@ Adoptium JRE).
 | --- | --- | --- |
 | `linux-x86_64` | Docker (Alpine/musl) | fully static — no glibc/distro dependency |
 | `linux-aarch64` | Docker (Alpine/musl, cross or arm runner) | fully static |
-| `windows-x64` | Docker (MinGW-w64 cross from Linux) | Authenticode-signed |
+| `windows-x86_64` | Docker (MinGW-w64 cross from Linux) | Authenticode-signed |
 | `macos-x86_64` | remote mac | static-linked deps, Developer-ID signed + notarized |
 | `macos-arm64` | remote mac | static-linked deps, Developer-ID signed + notarized |
 
