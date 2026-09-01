@@ -9,12 +9,12 @@
 #
 # Usage:
 #   ./build/build-linux.sh                 # build pinned version for host arch
-#   I2PD_VERSION=2.60.0 ./build/build-linux.sh
+#   I2PD_VERSION=2.61.0 ./build/build-linux.sh
 #   SKIP_GPG=1 ./build/build-linux.sh      # local spike only — skips verification
 #
 set -euo pipefail
 
-I2PD_VERSION="${I2PD_VERSION:-2.60.0}"
+I2PD_VERSION="${I2PD_VERSION:-2.61.0}"
 I2PD_REPO="https://github.com/PurpleI2P/i2pd.git"
 R4SAS_KEY_ID="66F6C87B98EBCFE2"            # long key id; full fp confirmed on import
 R4SAS_KEY_URL="https://repo.i2pd.xyz/r4sas.gpg"
@@ -37,6 +37,7 @@ docker run -i --rm \
   -e R4SAS_KEY_ID="$R4SAS_KEY_ID" \
   -e R4SAS_KEY_URL="$R4SAS_KEY_URL" \
   -e SKIP_GPG="$SKIP_GPG" \
+  -v "$REPO_ROOT":/qortium-build:ro \
   -v "$OUTDIR":/out \
   "$ALPINE_IMAGE" sh -eux <<'BUILD'
   apk add --no-cache \
@@ -60,6 +61,8 @@ docker run -i --rm \
     # Aborts (set -e) if the tag is unsigned or the signature does not verify.
     git tag -v "${I2PD_VERSION}"
   fi
+
+  /qortium-build/scripts/apply-upstream-patches.sh /tmp/i2pd
 
   # Fully static build via CMake. The Makefile's USE_STATIC path hardcodes
   # Debian-multiarch lib locations that don't exist on Alpine/musl; CMake

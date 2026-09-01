@@ -13,7 +13,7 @@
 #
 set -euo pipefail
 
-I2PD_VERSION="${I2PD_VERSION:-2.60.0}"
+I2PD_VERSION="${I2PD_VERSION:-2.61.0}"
 I2PD_REPO="https://github.com/PurpleI2P/i2pd.git"
 R4SAS_KEY_ID="66F6C87B98EBCFE2"
 R4SAS_KEY_URL="https://repo.i2pd.xyz/r4sas.gpg"
@@ -39,7 +39,9 @@ pacman -S --noconfirm --needed \
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-git clone "$I2PD_REPO" "$WORK/i2pd"
+# Keep the verified upstream tree byte-compatible with our LF patch. MSYS2 may
+# otherwise inherit core.autocrlf=true and make exact patch application fail.
+git -c core.autocrlf=false clone "$I2PD_REPO" "$WORK/i2pd"
 cd "$WORK/i2pd"
 git checkout "tags/${I2PD_VERSION}"
 
@@ -51,6 +53,8 @@ else
   gpg --fingerprint "$R4SAS_KEY_ID"
   git tag -v "${I2PD_VERSION}"
 fi
+
+"${REPO_ROOT}/scripts/apply-upstream-patches.sh" "$WORK/i2pd"
 
 cd build
 cmake -G "MinGW Makefiles" -DWITH_STATIC=ON -DWITH_UPNP=OFF .
