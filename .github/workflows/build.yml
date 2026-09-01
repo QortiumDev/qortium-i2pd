@@ -57,6 +57,7 @@ jobs:
       - name: Build (MinGW static)
         run: ./build/build-windows.sh
       - name: Test bounded file logging
+        shell: pwsh
         run: python scripts/test-log-rotation.py out/windows-x86_64/i2pd.exe
       - uses: actions/upload-artifact@v4
         with:
