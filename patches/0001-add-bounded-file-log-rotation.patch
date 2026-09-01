@@ -1,0 +1,252 @@
+diff --git a/daemon/Daemon.cpp b/daemon/Daemon.cpp
+index ecb7396..5f04449 100644
+--- a/daemon/Daemon.cpp
++++ b/daemon/Daemon.cpp
+@@ -196,6 +196,8 @@ namespace util
+ 		std::string logfile  = ""; i2p::config::GetOption("logfile",    logfile);
+ 		std::string loglevel = ""; i2p::config::GetOption("loglevel",   loglevel);
+ 		bool logclftime;           i2p::config::GetOption("logclftime", logclftime);
++		uint64_t logfilesize;      i2p::config::GetOption("logfilesize", logfilesize);
++		uint16_t logfilecount;     i2p::config::GetOption("logfilecount", logfilecount);
+ 
+ 		/* setup logging */
+ 		if (logclftime)
+@@ -210,6 +212,7 @@ namespace util
+ #endif
+ 
+ 		i2p::log::Logger().SetLogLevel(loglevel);
++		i2p::log::Logger().SetFileRotation(logfilesize, logfilecount);
+ 		if (logstream) {
+ 			LogPrint(eLogInfo, "Log: Sending messages to std::ostream");
+ 			i2p::log::Logger().SendTo (logstream);
+diff --git a/libi2pd/Config.cpp b/libi2pd/Config.cpp
+index fe406b1..3b97b91 100644
+--- a/libi2pd/Config.cpp
++++ b/libi2pd/Config.cpp
+@@ -53,6 +53,8 @@ namespace config {
+ 			("logfile", value<std::string>()->default_value(""),              "Path to logfile (stdout if not set, autodetect if daemon)")
+ 			("loglevel", value<std::string>()->default_value("warn"),         "Set the minimal level of log messages (debug, info, warn, error, none)")
+ 			("logclftime", bool_switch()->default_value(false),               "Write full CLF-formatted date and time to log (default: disabled, write only time)")
++			("logfilesize", value<uint64_t>()->default_value(0),               "Rotate logfile before it exceeds this size in bytes (0: disabled)")
++			("logfilecount", value<uint16_t>()->default_value(0),              "Number of rotated logfiles to retain (0: disabled)")
+ 			("family", value<std::string>()->default_value(""),               "Specify a family, router belongs to")
+ 			("datadir", value<std::string>()->default_value(""),              "Path to storage of i2pd data (RI, keys, peer profiles, ...)")
+ 			("host", value<std::string>()->default_value(""),                 "External IP")
+diff --git a/libi2pd/Log.cpp b/libi2pd/Log.cpp
+index eef5d19..49a2758 100644
+--- a/libi2pd/Log.cpp
++++ b/libi2pd/Log.cpp
+@@ -7,6 +7,8 @@
+ */
+ 
+ #include <time.h>
++#include <cstdio>
++#include <vector>
+ 
+ #include "Log.h"
+ #include "util.h"
+@@ -71,6 +73,7 @@ namespace log {
+ 	Log::Log():
+ 	m_Destination(eLogStdout), m_MinLevel(eLogInfo),
+ 	m_LogStream (nullptr), m_Logfile(""), m_HasColors(true), m_TimeFormat("%H:%M:%S"),
++	m_MaxFileSize (0), m_MaxLogFiles (0), m_CurrentFileSize (0),
+ 	m_IsRunning (false), m_Thread (nullptr)
+ 	{
+ 	}
+@@ -173,6 +176,22 @@ namespace log {
+ 				break;
+ #endif
+ 			case eLogFile:
++				if (m_LogStream)
++				{
++					std::stringstream line;
++					line << TimeAsString(msg->timestamp)
++						<< "@" << short_tid
++						<< "/" << g_LogLevelStr[msg->level]
++						<< " - " << msg->text << '\n';
++					auto text = line.str ();
++					RotateIfNeeded (text.size ());
++					if (m_LogStream)
++					{
++						*m_LogStream << text << std::flush;
++						if (*m_LogStream) m_CurrentFileSize += text.size ();
++					}
++				}
++				break;
+ 			case eLogStream:
+ 				if (m_LogStream)
+ 					*m_LogStream << TimeAsString(msg->timestamp)
+@@ -220,6 +239,9 @@ namespace log {
+ 		{
+ 			m_HasColors = false;
+ 			m_Logfile = path;
++			os->seekp (0, std::ios::end);
++			auto position = os->tellp ();
++			m_CurrentFileSize = position >= 0 ? static_cast<std::uint64_t>(position) : 0;
+ 			m_Destination = eLogFile;
+ 			m_LogStream = os;
+ 			return;
+@@ -227,6 +249,111 @@ namespace log {
+ 		LogPrint(eLogCritical, "Log: Can't open file ", path);
+ 	}
+ 
++	void Log::SetFileRotation (std::uint64_t maxFileSize, std::uint16_t maxLogFiles)
++	{
++		m_MaxFileSize = maxFileSize;
++		m_MaxLogFiles = maxLogFiles;
++	}
++
++	static bool FileExists (const std::string& path)
++	{
++		std::ifstream file (path, std::ios::binary);
++		return file.good ();
++	}
++
++	static bool RemoveIfExists (const std::string& path)
++	{
++		if (!FileExists (path)) return true;
++		return !std::remove (path.c_str ());
++	}
++
++	bool Log::ArchiveOversizedLog (const std::string& archive)
++	{
++		const auto temporary = m_Logfile + ".rotation-tmp";
++		const auto fallback = m_Logfile + ".rotation-full";
++		if (!RemoveIfExists (temporary) || !RemoveIfExists (fallback)) return false;
++
++		std::ifstream input (m_Logfile, std::ios::binary);
++		if (!input) return false;
++		input.seekg (0, std::ios::end);
++		auto length = input.tellg ();
++		if (length < 0) return false;
++		auto keep = static_cast<std::uint64_t>(length);
++		if (keep > m_MaxFileSize) keep = m_MaxFileSize;
++		input.seekg (length - static_cast<std::streamoff>(keep), std::ios::beg);
++		std::vector<char> tail (static_cast<std::size_t>(keep));
++		input.read (tail.data (), static_cast<std::streamsize>(tail.size ()));
++		if (static_cast<std::size_t>(input.gcount ()) != tail.size ()) return false;
++		input.close ();
++
++		std::ofstream output (temporary, std::ios::binary | std::ios::trunc);
++		if (!output) return false;
++		output.write (tail.data (), static_cast<std::streamsize>(tail.size ()));
++		output.close ();
++		if (!output) return false;
++
++		if (std::rename (m_Logfile.c_str (), fallback.c_str ())) return false;
++		if (std::rename (temporary.c_str (), archive.c_str ()))
++		{
++			std::rename (fallback.c_str (), m_Logfile.c_str ());
++			return false;
++		}
++		return RemoveIfExists (fallback);
++	}
++
++	bool Log::RotateLogFile ()
++	{
++		if (m_LogStream)
++		{
++			m_LogStream->flush ();
++			m_LogStream = nullptr;
++		}
++
++		bool rotated = true;
++		const auto oldest = m_Logfile + "." + std::to_string (m_MaxLogFiles);
++		rotated = RemoveIfExists (oldest);
++		for (std::uint16_t i = m_MaxLogFiles; rotated && i > 1; --i)
++		{
++			const auto source = m_Logfile + "." + std::to_string (i - 1);
++			const auto destination = m_Logfile + "." + std::to_string (i);
++			if (FileExists (source))
++			{
++				rotated = RemoveIfExists (destination) &&
++					!std::rename (source.c_str (), destination.c_str ());
++			}
++		}
++
++		const auto archive = m_Logfile + ".1";
++		if (rotated)
++		{
++			rotated = RemoveIfExists (archive);
++			if (rotated && FileExists (m_Logfile))
++			{
++				if (m_CurrentFileSize > m_MaxFileSize)
++					rotated = ArchiveOversizedLog (archive);
++				else
++					rotated = !std::rename (m_Logfile.c_str (), archive.c_str ());
++			}
++		}
++
++		SendTo (m_Logfile);
++		return rotated && m_LogStream;
++	}
++
++	void Log::RotateIfNeeded (std::size_t nextMessageSize)
++	{
++		if (!m_MaxFileSize || !m_MaxLogFiles || !m_CurrentFileSize) return;
++		if (m_CurrentFileSize < m_MaxFileSize &&
++			nextMessageSize <= m_MaxFileSize - m_CurrentFileSize) return;
++		if (!RotateLogFile ())
++		{
++			std::cerr << "Log: Failed to rotate " << m_Logfile
++				<< "; continuing without rotation" << std::endl;
++			m_MaxFileSize = 0;
++			m_MaxLogFiles = 0;
++		}
++	}
++
+ 	void Log::SendTo (std::shared_ptr<std::ostream> os) {
+ 		m_HasColors = false;
+ 		m_Destination = eLogStream;
+@@ -258,4 +385,3 @@ namespace log {
+ 
+ } // log
+ } // i2p
+-
+diff --git a/libi2pd/Log.h b/libi2pd/Log.h
+index 18592c9..6130d25 100644
+--- a/libi2pd/Log.h
++++ b/libi2pd/Log.h
+@@ -10,6 +10,7 @@
+ #define LOG_H__
+ 
+ #include <ctime>
++#include <cstdint>
+ #include <string>
+ #include <iostream>
+ #include <fstream>
+@@ -62,6 +63,9 @@ namespace log {
+ 			i2p::util::Queue<std::shared_ptr<LogMsg> > m_Queue;
+ 			bool m_HasColors;
+ 			std::string m_TimeFormat;
++			std::uint64_t m_MaxFileSize;
++			std::uint16_t m_MaxLogFiles;
++			std::uint64_t m_CurrentFileSize;
+ 			volatile bool m_IsRunning;
+ 			std::thread * m_Thread;
+ 
+@@ -73,6 +77,9 @@ namespace log {
+ 
+ 			void Run ();
+ 			void Process (std::shared_ptr<LogMsg> msg);
++			bool RotateLogFile ();
++			bool ArchiveOversizedLog (const std::string& archive);
++			void RotateIfNeeded (std::size_t nextMessageSize);
+ 
+ 			/**
+ 			 * @brief Makes formatted string from unix timestamp
+@@ -117,6 +124,13 @@ namespace log {
+ 			 */
+ 			void SetTimeFormat (std::string format) { m_TimeFormat = format; };
+ 
++			/**
++			 * @brief Enables bounded logfile rotation
++			 * @param maxFileSize Maximum active logfile size in bytes
++			 * @param maxLogFiles Number of rotated files to retain
++			 */
++			void SetFileRotation (std::uint64_t maxFileSize, std::uint16_t maxLogFiles);
++
+ 	#ifndef _WIN32
+ 			/**
+ 			 * @brief Sets log destination to syslog
+

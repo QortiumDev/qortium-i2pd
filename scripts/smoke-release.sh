@@ -7,13 +7,13 @@
 # port, and leaves no daemon running.
 #
 # Usage:
-#   ./smoke-release.sh [VERSION]      # default VERSION: 2.60.0-q2
+#   ./smoke-release.sh [VERSION]      # default VERSION: 2.61.0-q1
 #   SAM_PORT=7666 ./smoke-release.sh
 #
 set -euo pipefail
 
 REPO="QortiumDev/qortium-i2pd"
-VERSION="${1:-2.60.0-q2}"
+VERSION="${1:-2.61.0-q1}"
 SAM_PORT="${SAM_PORT:-7666}"
 BASE="https://github.com/${REPO}/releases/download/${VERSION}"
 

@@ -5,9 +5,43 @@ Qortium Home. This is not a QDN app: it produces platform-specific executables,
 checksums, and a release manifest for Home's managed runtime.
 
 The build scripts pin upstream [PurpleI2P/i2pd](https://github.com/PurpleI2P/i2pd)
-at version `2.60.0`. Unless `SKIP_GPG=1` is set for a local experiment, each
+at version `2.61.0`. Unless `SKIP_GPG=1` is set for a local experiment, each
 script imports the r4sas public key from `https://repo.i2pd.xyz/r4sas.gpg` and
-requires `git tag -v 2.60.0` to succeed before compiling.
+requires `git tag -v 2.61.0` to succeed before compiling. Only after that check
+does the build apply the patches in `patches/`.
+
+Those patches are Qortium-maintained downstream changes. PurpleI2P's repository
+explicitly prohibits LLM/AI-generated code in pull requests and LLM/AI-generated
+issue text. Do not submit this repository's patches or generated descriptions
+upstream.
+
+## Bounded file logging
+
+Upstream i2pd appends to one logfile without rotating it. Qortium's downstream
+patch adds two opt-in settings:
+
+- `logfilesize`: maximum size in bytes of the active logfile;
+- `logfilecount`: number of rotated files to keep (`.1` is newest).
+
+Both default to `0`, preserving upstream behavior. Rotation runs inside i2pd's
+logging thread, so it continues while Qortium Home is closed and uses the same
+behavior on Linux, macOS, and Windows. If the first run encounters an oversized
+legacy logfile, it retains only a bounded tail in `.1` instead of carrying the
+entire unbounded file into the archive set.
+
+The intended Qortium Home configuration is:
+
+```ini
+log=file
+loglevel=warn
+logclftime=true
+logfilesize=10485760
+logfilecount=5
+```
+
+That permits one 10 MiB active file plus five 10 MiB archives, for an
+approximately 60 MiB hard bound. Home must opt into these settings when it pins
+a release containing this patch; this repository does not modify Home.
 
 ## Targets and signing status
 
@@ -61,7 +95,7 @@ Each script writes under `out/<target>/`:
 ## CI and releases
 
 `.github/workflows/build.yml` runs the five-target matrix for pull requests,
-manual dispatches, and tags matching `*-q*`. A tag such as `2.60.0-q2` also runs
+manual dispatches, and tags matching `*-q*`. A tag such as `2.61.0-q1` also runs
 the release job after every platform build. That job packages Unix targets as
 `.tar.gz`, Windows as `.zip`, restores the Unix executable bit, and publishes:
 
@@ -80,8 +114,8 @@ archive hash, launches the binary with an isolated data directory, and checks a
 SAM v3 handshake on an alternate port:
 
 ```sh
-./scripts/smoke-release.sh 2.60.0-q2
-SAM_PORT=7666 ./scripts/smoke-release.sh 2.60.0-q2
+./scripts/smoke-release.sh 2.61.0-q1
+SAM_PORT=7666 ./scripts/smoke-release.sh 2.61.0-q1
 ```
 
 The script cleans up its temporary process and data directory when it exits.
