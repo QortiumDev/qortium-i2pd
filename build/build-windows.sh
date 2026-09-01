@@ -39,7 +39,9 @@ pacman -S --noconfirm --needed \
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-git clone "$I2PD_REPO" "$WORK/i2pd"
+# Keep the verified upstream tree byte-compatible with our LF patch. MSYS2 may
+# otherwise inherit core.autocrlf=true and make exact patch application fail.
+git -c core.autocrlf=false clone "$I2PD_REPO" "$WORK/i2pd"
 cd "$WORK/i2pd"
 git checkout "tags/${I2PD_VERSION}"
 

@@ -51,7 +51,7 @@ a release containing this patch; this repository does not modify Home.
 | `linux-aarch64` | native `ubuntu-24.04-arm`, Alpine 3.20 Docker build | Fully static musl binary; no code-signing step |
 | `windows-x86_64` | `windows-latest` with MSYS2/MINGW64 | Static MinGW build; not Authenticode-signed |
 | `macos-arm64` | native `macos-14` runner | Static third-party dependencies, dynamic system `libSystem`; ad-hoc signed by default |
-| `macos-x86_64` | cross-compiled on a `macos-14` Apple-Silicon runner | Same dependency model; ad-hoc signed by default |
+| `macos-x86_64` | native `macos-15-intel` runner | Same dependency model; ad-hoc signed by default |
 
 The macOS script uses `codesign -s -` when no identity is provided. Setting
 `MACOS_SIGN_IDENTITY` switches the build to Developer ID signing, but

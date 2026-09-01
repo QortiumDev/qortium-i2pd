@@ -64,14 +64,15 @@ jobs:
           path: out/windows-x86_64/
 
   macos:
-    # Both arches build on Apple-Silicon (macos-14) runners; x86_64 is
-    # cross-compiled there to avoid GitHub's scarce/slow Intel (macos-13) queue.
+    # Use native runners for both arches. Homebrew no longer provides all x86_64
+    # bottles to an Apple-Silicon cross-build, while macos-15-intel remains a
+    # supported GitHub-hosted runner through August 2027.
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { runner: macos-14, arch: arm64 }    # native
-          - { runner: macos-14, arch: x86_64 }   # cross-compiled
+          - { runner: macos-14,       arch: arm64 }
+          - { runner: macos-15-intel, arch: x86_64 }
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
