@@ -1,6 +1,6 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # Apply Qortium's reviewed downstream changes to a clean, verified i2pd tree.
-set -euo pipefail
+set -eu
 
 SOURCE_DIR="${1:?usage: apply-upstream-patches.sh <i2pd-source-dir>}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
